@@ -5,7 +5,7 @@ import './App.css'
 import LabelTimerApp from './components/LabelTimerApp'
 
 function App() {
-  const [count, setCount] = useState(0)
+
 
   return (
     <>

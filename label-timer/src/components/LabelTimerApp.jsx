@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, Square, Plus, Download, Clock, Target, History, CheckCircle, Calendar, Settings, User, BarChart3 } from 'lucide-react';
+import Swal from 'sweetalert2';
+
+// Import components
+import Sidebar from './Sidebar';
+import Dashboard from './Dashboard';
+import HistoryComponent from './HistoryComponent';
+import TimerInterface from './TimerInterface';
+import LabelModal from './LabelModal';
+import Notification from './Notification';
 
 const LabelTimerApp = () => {
   // State management
@@ -14,9 +22,8 @@ const LabelTimerApp = () => {
   const [notificationMessage, setNotificationMessage] = useState('');
   const [activeMenu, setActiveMenu] = useState('dashboard');
   
-  // Mode 1 settings
+  // Timer settings
   const [intervalTime, setIntervalTime] = useState(60);
-  const [timerMode, setTimerMode] = useState('stopwatch');
   const [countdownTime, setCountdownTime] = useState(300);
   
   // Refs
@@ -47,7 +54,7 @@ const LabelTimerApp = () => {
     if (isRunning) {
       intervalRef.current = setInterval(() => {
         setCurrentTime(prev => {
-          if (timerMode === 'countdown') {
+          if (activeMenu === 'countdown') {
             const newTime = prev - 1;
             if (newTime <= 0) {
               handleStop();
@@ -60,6 +67,7 @@ const LabelTimerApp = () => {
         });
       }, 1000);
 
+      // Auto labeling for Mode 1
       if (mode === 1) {
         labelIntervalRef.current = setInterval(() => {
           requestLabel();
@@ -74,9 +82,9 @@ const LabelTimerApp = () => {
       clearInterval(intervalRef.current);
       clearInterval(labelIntervalRef.current);
     };
-  }, [isRunning, mode, intervalTime, timerMode]);
+  }, [isRunning, mode, intervalTime, activeMenu]);
 
-  // Global keyboard handling for quick labeling
+  // Global keyboard handling
   useEffect(() => {
     const handleKeyPress = (e) => {
       if (!isRunning || !currentProject) return;
@@ -100,13 +108,14 @@ const LabelTimerApp = () => {
     return () => document.removeEventListener('keydown', handleKeyPress);
   }, [isRunning, currentProject, currentTime, labels, logs]);
 
+  // Utility functions
   const formatTime = (seconds) => {
     const hours = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
     
     if (hours > 0) {
-      return `${hours}h ${mins.toString().padStart(2, '0')}m`;
+      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
@@ -126,20 +135,68 @@ const LabelTimerApp = () => {
     setTimeout(() => setShowNotification(false), 2000);
   };
 
-  const createProject = () => {
-    const projectName = prompt('ชื่อโปรเจค:');
+  // Project management
+  const createProject = async () => {
+    const { value: projectName } = await Swal.fire({
+      title: '🎯 สร้างโปรเจคใหม่',
+      text: 'กรอกชื่อโปรเจคที่ต้องการ',
+      input: 'text',
+      inputPlaceholder: 'เช่น: การศึกษาพฤติกรรม, งานวิจัย, โปรเจค A',
+      showCancelButton: true,
+      confirmButtonText: '✅ สร้าง',
+      cancelButtonText: '❌ ยกเลิก',
+      confirmButtonColor: '#3b82f6',
+      cancelButtonColor: '#6b7280',
+      background: '#ffffff',
+      backdrop: 'rgba(0,0,0,0.4)',
+      customClass: {
+        popup: 'rounded-2xl shadow-2xl',
+        title: 'text-xl font-bold text-gray-800',
+        confirmButton: 'px-6 py-3 rounded-xl shadow-lg',
+        cancelButton: 'px-6 py-3 rounded-xl'
+      },
+      inputValidator: (value) => {
+        if (!value) {
+          return 'กรุณากรอกชื่อโปรเจค!';
+        }
+        if (value.length < 2) {
+          return 'ชื่อโปรเจคต้องมีอย่างน้อย 2 ตัวอักษร';
+        }
+        if (value.length > 50) {
+          return 'ชื่อโปรเจคต้องไม่เกิน 50 ตัวอักษร';
+        }
+        if (projects.some(p => p.name.toLowerCase() === value.toLowerCase())) {
+          return 'ชื่อโปรเจคนี้มีอยู่แล้ว!';
+        }
+      }
+    });
+
     if (projectName) {
       const newProject = {
         id: Date.now(),
-        name: projectName,
+        name: projectName.trim(),
         createdAt: new Date().toISOString(),
         logs: []
       };
+      
       const updatedProjects = [...projects, newProject];
       setProjects(updatedProjects);
       setCurrentProject(newProject);
       localStorage.setItem('labelTimerProjects', JSON.stringify(updatedProjects));
-      showNotificationMessage('สร้างโปรเจคสำเร็จ! 🎉');
+      
+      Swal.fire({
+        title: '🎉 สำเร็จ!',
+        text: `สร้างโปรเจค "${projectName}" เรียบร้อยแล้ว`,
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false,
+        background: '#ffffff',
+        customClass: {
+          popup: 'rounded-2xl shadow-2xl'
+        }
+      });
+      
+      showNotificationMessage(`สร้างโปรเจค: ${projectName} สำเร็จ! 🎉`);
     }
   };
 
@@ -160,6 +217,62 @@ const LabelTimerApp = () => {
     }
   };
 
+  const deleteProject = async (projectId) => {
+    const project = projects.find(p => p.id === projectId);
+    
+    const result = await Swal.fire({
+      title: '⚠️ ยืนยันการลบ',
+      html: `
+        <div class="text-center">
+          <p class="text-lg mb-3">คุณต้องการลบโปรเจค</p>
+          <p class="text-xl font-bold text-red-600 mb-3">"${project?.name}"</p>
+          <p class="text-sm text-gray-600">ข้อมูลทั้งหมดจะหายไปและไม่สามารถกู้คืนได้</p>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: '🗑️ ลบเลย',
+      cancelButtonText: '📋 เก็บไว้',
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      background: '#ffffff',
+      backdrop: 'rgba(0,0,0,0.4)',
+      customClass: {
+        popup: 'rounded-2xl shadow-2xl',
+        title: 'text-xl font-bold text-gray-800',
+        confirmButton: 'px-6 py-3 rounded-xl shadow-lg',
+        cancelButton: 'px-6 py-3 rounded-xl'
+      }
+    });
+
+    if (result.isConfirmed) {
+      const updatedProjects = projects.filter(p => p.id !== projectId);
+      setProjects(updatedProjects);
+      localStorage.setItem('labelTimerProjects', JSON.stringify(updatedProjects));
+      
+      if (currentProject?.id === projectId) {
+        setCurrentProject(null);
+        setLabels([]);
+        setLogs([]);
+      }
+      
+      Swal.fire({
+        title: '🗑️ ลบสำเร็จ!',
+        text: `ลบโปรเจค "${project?.name}" เรียบร้อยแล้ว`,
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false,
+        background: '#ffffff',
+        customClass: {
+          popup: 'rounded-2xl shadow-2xl'
+        }
+      });
+      
+      showNotificationMessage('ลบโปรเจคสำเร็จ! 🗑️');
+    }
+  };
+
+  // Label management
   const requestLabel = () => {
     const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+D1uncsccP');
     audio.play().catch(() => {});
@@ -180,7 +293,8 @@ const LabelTimerApp = () => {
       timestamp: new Date().toISOString(),
       mode: mode,
       action: 'label_added',
-      projectId: currentProject?.id
+      projectId: currentProject?.id,
+      timerType: activeMenu
     };
     
     const newLabels = [...labels, newLabel];
@@ -195,8 +309,109 @@ const LabelTimerApp = () => {
     setTimeout(saveProjectData, 100);
   };
 
+  const deleteLabel = async (labelId) => {
+    const label = labels.find(l => l.id === labelId);
+    
+    const result = await Swal.fire({
+      title: '🏷️ ลบ Label',
+      html: `
+        <div class="text-center">
+          <div class="text-4xl mb-3">${label?.emoji}</div>
+          <p class="text-lg">คุณต้องการลบ label</p>
+          <p class="text-xl font-bold text-blue-600">"${label?.text}"</p>
+        </div>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: '🗑️ ลบ',
+      cancelButtonText: '📋 เก็บไว้',
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      background: '#ffffff',
+      customClass: {
+        popup: 'rounded-2xl shadow-2xl',
+        confirmButton: 'px-6 py-3 rounded-xl',
+        cancelButton: 'px-6 py-3 rounded-xl'
+      }
+    });
+
+    if (result.isConfirmed) {
+      const updatedLabels = labels.filter(l => l.id !== labelId);
+      const updatedLogs = logs.filter(l => l.id !== labelId);
+      
+      setLabels(updatedLabels);
+      setLogs(updatedLogs);
+      
+      Swal.fire({
+        title: '✅ ลบสำเร็จ!',
+        text: 'ลบ label เรียบร้อยแล้ว',
+        icon: 'success',
+        timer: 1500,
+        showConfirmButton: false,
+        background: '#ffffff',
+        customClass: {
+          popup: 'rounded-2xl shadow-2xl'
+        }
+      });
+      
+      showNotificationMessage('ลบ label สำเร็จ! 🗑️');
+      setTimeout(saveProjectData, 100);
+    }
+  };
+
+  const deleteLog = async (logId) => {
+    const log = logs.find(l => l.id === logId);
+    
+    const result = await Swal.fire({
+      title: '📜 ลบรายการ',
+      html: `
+        <div class="text-center">
+          ${log?.emoji ? `<div class="text-4xl mb-3">${log.emoji}</div>` : ''}
+          <p class="text-lg">คุณต้องการลบรายการ</p>
+          <p class="text-xl font-bold text-purple-600">"${log?.text || log?.action?.replace('_', ' ')}"</p>
+        </div>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: '🗑️ ลบ',
+      cancelButtonText: '📋 เก็บไว้',
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      background: '#ffffff',
+      customClass: {
+        popup: 'rounded-2xl shadow-2xl',
+        confirmButton: 'px-6 py-3 rounded-xl',
+        cancelButton: 'px-6 py-3 rounded-xl'
+      }
+    });
+
+    if (result.isConfirmed) {
+      const updatedLogs = logs.filter(l => l.id !== logId);
+      setLogs(updatedLogs);
+      
+      const updatedLabels = labels.filter(l => l.id !== logId);
+      setLabels(updatedLabels);
+      
+      Swal.fire({
+        title: '✅ ลบสำเร็จ!',
+        text: 'ลบรายการเรียบร้อยแล้ว',
+        icon: 'success',
+        timer: 1500,
+        showConfirmButton: false,
+        background: '#ffffff',
+        customClass: {
+          popup: 'rounded-2xl shadow-2xl'
+        }
+      });
+      
+      showNotificationMessage('ลบรายการสำเร็จ! 🗑️');
+      setTimeout(saveProjectData, 100);
+    }
+  };
+
+  // Timer controls
   const handleStart = () => {
-    if (timerMode === 'countdown' && currentTime === 0) {
+    if (activeMenu === 'countdown' && currentTime === 0) {
       setCurrentTime(countdownTime);
     }
     setIsRunning(true);
@@ -207,7 +422,8 @@ const LabelTimerApp = () => {
       time: currentTime,
       timestamp: new Date().toISOString(),
       mode: mode,
-      projectId: currentProject?.id
+      projectId: currentProject?.id,
+      timerType: activeMenu
     };
     setLogs([...logs, logEntry]);
     showNotificationMessage('เริ่มจับเวลา ⏰');
@@ -222,7 +438,8 @@ const LabelTimerApp = () => {
       time: currentTime,
       timestamp: new Date().toISOString(),
       mode: mode,
-      projectId: currentProject?.id
+      projectId: currentProject?.id,
+      timerType: activeMenu
     };
     setLogs([...logs, logEntry]);
     showNotificationMessage('หยุดชั่วคราว ⏸️');
@@ -237,32 +454,32 @@ const LabelTimerApp = () => {
       time: currentTime,
       timestamp: new Date().toISOString(),
       mode: mode,
-      projectId: currentProject?.id
+      projectId: currentProject?.id,
+      timerType: activeMenu
     };
     setLogs([...logs, logEntry]);
-    showNotificationMessage('หยุดจับเวลา ⏹️');
-    
-    setTimeout(generateCSV, 500);
+    showNotificationMessage('หยุดจับเวลา ⏹️ (กด Export CSV เพื่อดาวน์โหลด)');
   };
 
   const handleReset = () => {
     setIsRunning(false);
-    setCurrentTime(timerMode === 'countdown' ? countdownTime : 0);
-    setLabels([]);
+    setCurrentTime(activeMenu === 'countdown' ? countdownTime : 0);
     showNotificationMessage('รีเซ็ตเรียบร้อย 🔄');
   };
 
+  // CSV Export
   const generateCSV = () => {
     if (labels.length === 0) return;
 
-    const csvHeaders = ['Timestamp', 'Time (seconds)', 'Time (MM:SS)', 'Emoji', 'Label', 'Mode'];
+    const csvHeaders = ['Timestamp', 'Time (seconds)', 'Time (HH:MM:SS)', 'Emoji', 'Label', 'Mode', 'Timer Type'];
     const csvData = labels.map(label => [
       label.timestamp,
       label.time,
       formatTime(label.time),
       label.emoji,
       label.text,
-      `Mode ${label.mode}`
+      `Mode ${label.mode}`,
+      label.timerType || 'stopwatch'
     ]);
 
     const csvContent = [csvHeaders, ...csvData]
@@ -282,366 +499,144 @@ const LabelTimerApp = () => {
     showNotificationMessage('ดาวน์โหลด CSV สำเร็จ! 📁');
   };
 
-  const getTodayDate = () => {
-    const today = new Date();
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    
-    return {
-      day: today.getDate(),
-      month: months[today.getMonth()],
-      dayName: days[today.getDay()]
-    };
+  // Render content based on active menu
+  const renderContent = () => {
+    switch(activeMenu) {
+      case 'dashboard':
+        return (
+          <Dashboard 
+            currentTime={currentTime}
+            isRunning={isRunning}
+            labels={labels}
+            projects={projects}
+            createProject={createProject}
+            setCurrentProject={setCurrentProject}
+            loadProjectData={loadProjectData}
+            deleteProject={deleteProject}
+            showNotificationMessage={showNotificationMessage}
+            formatTimeForDisplay={formatTimeForDisplay}
+          />
+        );
+      case 'history':
+        return (
+          <HistoryComponent 
+            logs={logs}
+            formatTime={formatTime}
+            deleteLog={deleteLog}
+          />
+        );
+      case 'stopwatch':
+        return (
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">Stopwatch</h2>
+            <TimerInterface 
+              timerType="stopwatch"
+              currentProject={currentProject}
+              mode={mode}
+              setMode={setMode}
+              intervalTime={intervalTime}
+              setIntervalTime={setIntervalTime}
+              countdownTime={countdownTime}
+              setCountdownTime={setCountdownTime}
+              currentTime={currentTime}
+              formatTime={formatTime}
+              isRunning={isRunning}
+              handleStart={handleStart}
+              handlePause={handlePause}
+              handleStop={handleStop}
+              handleReset={handleReset}
+              requestLabel={requestLabel}
+              labels={labels}
+              generateCSV={generateCSV}
+              deleteLabel={deleteLabel}
+              createProject={createProject}
+            />
+          </div>
+        );
+      case 'countdown':
+        return (
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">Countdown Timer</h2>
+            <TimerInterface 
+              timerType="countdown"
+              currentProject={currentProject}
+              mode={mode}
+              setMode={setMode}
+              intervalTime={intervalTime}
+              setIntervalTime={setIntervalTime}
+              countdownTime={countdownTime}
+              setCountdownTime={setCountdownTime}
+              currentTime={currentTime}
+              formatTime={formatTime}
+              isRunning={isRunning}
+              handleStart={handleStart}
+              handlePause={handlePause}
+              handleStop={handleStop}
+              handleReset={handleReset}
+              requestLabel={requestLabel}
+              labels={labels}
+              generateCSV={generateCSV}
+              deleteLabel={deleteLabel}
+              createProject={createProject}
+            />
+          </div>
+        );
+      default:
+        return (
+          <Dashboard 
+            currentTime={currentTime}
+            isRunning={isRunning}
+            labels={labels}
+            projects={projects}
+            createProject={createProject}
+            setCurrentProject={setCurrentProject}
+            loadProjectData={loadProjectData}
+            deleteProject={deleteProject}
+            showNotificationMessage={showNotificationMessage}
+            formatTimeForDisplay={formatTimeForDisplay}
+          />
+        );
+    }
   };
-
-  const today = getTodayDate();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      {/* Notification Toast */}
-      {showNotification && (
-        <div className="fixed top-4 right-4 z-50">
-          <div className="alert alert-success bg-white shadow-lg border border-green-200 rounded-xl">
-            <CheckCircle size={20} className="text-green-500" />
-            <span className="text-gray-800">{notificationMessage}</span>
-          </div>
-        </div>
-      )}
+      {/* Notification */}
+      <Notification 
+        showNotification={showNotification}
+        notificationMessage={notificationMessage}
+      />
 
       <div className="flex h-screen">
         {/* Sidebar */}
-        <div className="w-64 bg-white shadow-xl border-r border-gray-100">
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-8">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                <Clock size={24} className="text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-800">Label Timer</h1>
-              </div>
-            </div>
-
-            <nav className="space-y-2">
-              <button
-                onClick={() => setActiveMenu('dashboard')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  activeMenu === 'dashboard' 
-                    ? 'bg-blue-50 text-blue-600 border border-blue-200' 
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                <BarChart3 size={20} />
-                Dashboard
-              </button>
-              <button
-                onClick={() => setActiveMenu('history')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  activeMenu === 'history' 
-                    ? 'bg-blue-50 text-blue-600 border border-blue-200' 
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                <History size={20} />
-                History
-              </button>
-              <button
-                onClick={() => setActiveMenu('calendar')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  activeMenu === 'calendar' 
-                    ? 'bg-blue-50 text-blue-600 border border-blue-200' 
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                <Calendar size={20} />
-                Calendar
-              </button>
-              <button
-                onClick={() => setActiveMenu('settings')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  activeMenu === 'settings' 
-                    ? 'bg-blue-50 text-blue-600 border border-blue-200' 
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                <Settings size={20} />
-                Settings
-              </button>
-            </nav>
-          </div>
-        </div>
+        <Sidebar 
+          activeMenu={activeMenu}
+          setActiveMenu={setActiveMenu}
+          currentProject={currentProject}
+          projects={projects}
+          setCurrentProject={setCurrentProject}
+          loadProjectData={loadProjectData}
+          deleteProject={deleteProject}
+          isRunning={isRunning}
+          countdownTime={countdownTime}
+          setCurrentTime={setCurrentTime}
+          setIsRunning={setIsRunning}
+        />
 
         {/* Main Content */}
         <div className="flex-1 overflow-auto">
           <div className="p-8">
-            {/* Header */}
-            <div className="flex justify-between items-start mb-8">
-              <div>
-                <div className="flex items-center gap-4 mb-2">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center">
-                    <User size={24} className="text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-800">Hello, Timer!</h2>
-                    <p className="text-gray-500">{today.day} {today.month}, <span className="text-blue-500">{today.dayName}</span></p>
-                  </div>
-                </div>
-              </div>
-              <button 
-                onClick={createProject} 
-                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl flex items-center gap-2 shadow-lg transition-all duration-200 hover:shadow-xl"
-              >
-                <Plus size={18} />
-                โปรเจคใหม่
-              </button>
-            </div>
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              {/* Timer Card */}
-              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <p className="text-blue-100 text-sm">Current Session</p>
-                    <h3 className="text-3xl font-bold">{formatTimeForDisplay(currentTime)}</h3>
-                  </div>
-                  <div className="text-blue-200">
-                    <Clock size={32} />
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-green-400' : 'bg-gray-400'}`}></div>
-                  <span className="text-sm text-blue-100">
-                    {isRunning ? 'Running' : 'Stopped'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Labels Count */}
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <p className="text-gray-500 text-sm">Labels Today</p>
-                    <h3 className="text-3xl font-bold text-gray-800">{labels.length}</h3>
-                  </div>
-                  <div className="text-gray-400">
-                    <Target size={32} />
-                  </div>
-                </div>
-                <div className="text-sm text-gray-500">
-                  {labels.length > 0 ? 'Great progress!' : 'Start labeling'}
-                </div>
-              </div>
-
-              {/* Projects Count */}
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <p className="text-gray-500 text-sm">Total Projects</p>
-                    <h3 className="text-3xl font-bold text-gray-800">{projects.length}</h3>
-                  </div>
-                  <div className="text-gray-400">
-                    <History size={32} />
-                  </div>
-                </div>
-                <div className="text-sm text-gray-500">
-                  {projects.length > 0 ? 'Active workspace' : 'Create your first project'}
-                </div>
-              </div>
-            </div>
-
-            {currentProject && (
-              <>
-                {/* Project Selector */}
-                <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    📁 Current Project
-                  </label>
-                  <select 
-                    value={currentProject?.id || ''} 
-                    onChange={(e) => {
-                      const project = projects.find(p => p.id === parseInt(e.target.value));
-                      setCurrentProject(project);
-                      if (project) loadProjectData(project);
-                    }}
-                    className="w-full p-3 border border-gray-200 rounded-xl bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">-- เลือกโปรเจค --</option>
-                    {projects.map(project => (
-                      <option key={project.id} value={project.id}>
-                        {project.name} ({new Date(project.createdAt).toLocaleDateString('th-TH')})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Mode Selection */}
-                <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Select Mode</h3>
-                  <div className="flex gap-4">
-                    <button
-                      onClick={() => setMode(1)}
-                      className={`flex-1 p-4 rounded-xl border-2 transition-all duration-200 ${
-                        mode === 1 
-                          ? 'border-blue-500 bg-blue-50 text-blue-700' 
-                          : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
-                      }`}
-                    >
-                      <Clock size={24} className="mx-auto mb-2" />
-                      <div className="font-medium">Auto Label</div>
-                      <div className="text-sm opacity-70">Automatic intervals</div>
-                    </button>
-                    <button
-                      onClick={() => setMode(2)}
-                      className={`flex-1 p-4 rounded-xl border-2 transition-all duration-200 ${
-                        mode === 2 
-                          ? 'border-blue-500 bg-blue-50 text-blue-700' 
-                          : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
-                      }`}
-                    >
-                      <Target size={24} className="mx-auto mb-2" />
-                      <div className="font-medium">Manual Label</div>
-                      <div className="text-sm opacity-70">Manual control</div>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Timer Display */}
-                <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100 mb-6 text-center">
-                  <div className="text-8xl font-mono font-bold text-gray-800 mb-6">
-                    {formatTime(currentTime)}
-                  </div>
-                  
-                  <div className="flex justify-center gap-4 flex-wrap">
-                    {!isRunning ? (
-                      <button 
-                        onClick={handleStart} 
-                        className="bg-green-500 hover:bg-green-600 text-white px-8 py-4 rounded-xl flex items-center gap-3 shadow-lg transition-all duration-200 hover:shadow-xl"
-                      >
-                        <Play size={24} />
-                        Start
-                      </button>
-                    ) : (
-                      <button 
-                        onClick={handlePause} 
-                        className="bg-yellow-500 hover:bg-yellow-600 text-white px-8 py-4 rounded-xl flex items-center gap-3 shadow-lg transition-all duration-200 hover:shadow-xl"
-                      >
-                        <Pause size={24} />
-                        Pause
-                      </button>
-                    )}
-                    
-                    <button 
-                      onClick={handleStop} 
-                      className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-xl flex items-center gap-3 shadow-lg transition-all duration-200 hover:shadow-xl"
-                    >
-                      <Square size={24} />
-                      Stop
-                    </button>
-                    
-                    <button 
-                      onClick={handleReset} 
-                      className="bg-gray-500 hover:bg-gray-600 text-white px-8 py-4 rounded-xl shadow-lg transition-all duration-200 hover:shadow-xl"
-                    >
-                      🔄 Reset
-                    </button>
-                  </div>
-
-                  {/* Keyboard Shortcuts */}
-                  {isRunning && (
-                    <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
-                      <div className="text-sm text-blue-800">
-                        <span className="font-medium">Quick Keys:</span>
-                        <span className="ml-2">Press 1-4 for instant labeling</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Labels Display */}
-                {labels.length > 0 && (
-                  <div className="bg-white rounded-2xl shadow-lg border border-gray-100 mb-6">
-                    <div className="p-6 border-b border-gray-100">
-                      <h3 className="text-lg font-semibold text-gray-800">
-                        Recent Labels ({labels.length})
-                      </h3>
-                    </div>
-                    <div className="p-6">
-                      <div className="space-y-3 max-h-60 overflow-y-auto">
-                        {labels.slice(-5).reverse().map((label) => (
-                          <div key={label.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                            <div className="flex items-center gap-3">
-                              <div className="text-2xl">{label.emoji}</div>
-                              <div>
-                                <div className="font-medium text-gray-800">{label.text}</div>
-                                <div className="text-sm text-gray-500">
-                                  {new Date(label.timestamp).toLocaleTimeString('th-TH')}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-mono text-gray-800">{formatTime(label.time)}</div>
-                              <div className="text-xs text-gray-500">Mode {label.mode}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Download Button */}
-                {labels.length > 0 && (
-                  <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 text-center">
-                    <button 
-                      onClick={generateCSV} 
-                      className="bg-green-500 hover:bg-green-600 text-white px-8 py-4 rounded-xl flex items-center gap-3 mx-auto shadow-lg transition-all duration-200 hover:shadow-xl"
-                    >
-                      <Download size={20} />
-                      ดาวน์โหลด CSV
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
+            {renderContent()}
           </div>
         </div>
       </div>
 
-      {/* Quick Label Modal */}
-      <dialog ref={modalRef} className="modal">
-        <div className="modal-box max-w-md bg-white rounded-2xl shadow-2xl">
-          <h3 className="font-bold text-xl mb-4 text-gray-800">⚡ เลือก Label ด่วน</h3>
-          <p className="mb-6 text-center text-gray-600">
-            เลือก Label ที่ต้องการ หรือกดปุ่ม 1-4 ในคีย์บอร์ด
-          </p>
-          
-          <div className="grid grid-cols-2 gap-4">
-            {labelOptions.map((option) => (
-              <button
-                key={option.key}
-                onClick={() => addQuickLabel(option)}
-                className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all duration-200 hover:scale-105 ${option.color}`}
-              >
-                <div className="text-3xl">{option.emoji}</div>
-                <div className="font-medium">{option.label}</div>
-                <div className="text-xs opacity-70">กด {option.key}</div>
-              </button>
-            ))}
-          </div>
-          
-          <div className="modal-action">
-            <button 
-              className="btn btn-ghost" 
-              onClick={() => modalRef.current?.close()}
-            >
-              ยกเลิก
-            </button>
-          </div>
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          <button>close</button>
-        </form>
-      </dialog>
+      {/* Label Modal */}
+      <LabelModal 
+        modalRef={modalRef}
+        labelOptions={labelOptions}
+        addQuickLabel={addQuickLabel}
+      />
     </div>
   );
 };
